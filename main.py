@@ -1,12 +1,11 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
-tasks = []
+user_dict = dict()
 
 
 # определяем функцию /start
 async def start(update, context):
-    print(update.message.from_user.first_name)
     # ожидание отправки сообщения по сети - нужен `await`
     text_out = (f'Привет {update.message.from_user.first_name}!{chr(10)}'
                 f'Вот описание команд{chr(10)}'
@@ -14,14 +13,20 @@ async def start(update, context):
                 f'/list - отображение списка задач{chr(10)}'
                 f'/done номер задачи - завершает задачу')
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text_out)
+    print(update.effective_chat.id)
 
 
 # Function to add a new task
 async def add_task(update, context):
     list_text = update.message.text.split("/add ", 1)
     if len(list_text) > 1:
-        task_description = update.message.text.split("/add ", 1)[1]
-        tasks.append({"description": task_description, "completed": False})
+        task_description = list_text[1]
+        # проверяем id, если есть с таким, до добавляем в его список, либо создаём
+        if update.effective_chat.id in user_dict.keys():
+            user_dict[update.effective_chat.id].append({"description": task_description, "completed": False})
+        else:
+            user_dict[update.effective_chat.id] = [{"description": task_description, "completed": False}]
+        print(user_dict[update.effective_chat.id])
         text_out = f"Task '{task_description}' added successfully!"
     else:
         text_out = "Invalid task description"
@@ -30,12 +35,16 @@ async def add_task(update, context):
 
 # Function to list all tasks
 async def list_tasks(update, context):
+    try:
+        tasks = user_dict[update.effective_chat.id]
+    except KeyError:
+        tasks = []
     if not tasks:
         text_out = "No tasks yet!"
     else:
         text_out = "Your tasks:\n"
         for i, task in enumerate(tasks):
-            status = "Completed" if task["completed"] else "Not completed"
+            status = "Completed." if task["completed"] else "Not completed."
             text_out += f"{i + 1}. {status} {task['description']}\n"
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text_out)
 
@@ -43,13 +52,17 @@ async def list_tasks(update, context):
 # Function to mark a task as completed
 async def mark_done(update, context):
     try:
+        tasks = user_dict[update.effective_chat.id]
         task_index = int(update.message.text.split("/done ", 1)[1]) - 1
         tasks[task_index]["completed"] = True
+        user_dict[update.effective_chat.id] = tasks
         text_out = f"Task {task_index + 1} marked as completed!"
     except ValueError:
         text_out = "Please provide a valid task number."
     except IndexError:
         text_out = "Invalid task number."
+    except KeyError:
+        text_out = "You don't have any tasks."
     await context.bot.send_message(chat_id=update.effective_chat.id, text=text_out)
 
 
